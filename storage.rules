@@ -1,0 +1,18 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Media Collection for Encrypted Images
+    match /media/{imageId} {
+      // Read: Any authenticated user can download (but it's mathematically encrypted anyway)
+      allow read: if request.auth != null;
+      
+      // Write: Authenticated users can upload
+      allow create: if request.auth != null
+                   && request.resource.contentType == 'application/json'
+                   && request.resource.size < 10 * 1024 * 1024; // 10MB limit for base64 JSON payload
+                   
+      // No updates or deletes to preserve history
+      allow delete, update: if false; 
+    }
+  }
+}

@@ -1,0 +1,45 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Define the exact hardcoded Firebase Auth UIDs allowed in this 2-user hyper-private app
+    // Replace "USER_A_UID" and "USER_B_UID" with your actual Firebase Auth UIDs
+    // Allow any authenticated user for now since the real UIDs are unknown.
+    // To lock this down later, replace this with: 
+    // return request.auth != null && (request.auth.uid == "YOUR_REAL_UID_1" || request.auth.uid == "YOUR_REAL_UID_2");
+    function isAuthorizedUser() {
+      return request.auth != null;
+    }
+
+    // Public Key Directory Collection
+    match /users/{userId} {
+      // Any authenticated Firebase Auth user can read public keys for key exchange
+      allow read: if request.auth != null;
+
+      // Users can ONLY create/update their own document and publish their own public key
+      allow write: if request.auth != null 
+        && request.auth.uid == userId
+        && request.resource.data.keys().hasAll(['uid', 'email', 'publicKey', 'createdAt']);
+    }
+
+    // Encrypted Messages Collection
+    match /messages/{messageId} {
+      // READ: Allowed ONLY if the caller is User A or User B
+      allow read: if isAuthorizedUser();
+
+      // CREATE: Allowed ONLY if:
+      // 1. Caller is an authorized participant (User A or User B)
+      // 2. The senderId matches the caller's Firebase Auth UID
+      // 3. Payload strictly contains ciphertext, nonce, senderId, receiverId, and createdAt fields
+      // 4. Plaintext fields are strictly forbidden
+      allow create: if isAuthorizedUser()
+        // 2. The senderId matches the caller's Firebase Auth UID
+        && request.resource.data.senderId == request.auth.uid
+        && request.resource.data.keys().hasAll(['ciphertext', 'nonce', 'senderId', 'receiverId', 'createdAt'])
+        && !request.resource.data.keys().hasAny(['text', 'message', 'plaintext']);
+
+      // UPDATE / DELETE: Strictly prohibited to preserve immutable chat history
+      allow update, delete: if false;
+    }
+  }
+}

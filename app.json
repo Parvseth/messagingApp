@@ -1,0 +1,12 @@
+{
+  "plugins": [
+    "expo-secure-store"
+  ],
+  "extra": {
+    "eas": {
+      "projectId": "b5ce5e1d-5d4f-4441-8d26-c8a36782fa58"
+    }
+  },
+  "owner": "parvseths-team",
+  "slug": "parvseth"
+}
