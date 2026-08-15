@@ -1,15 +1,51 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { MessageEnvelope, MessageType, TextPayload } from '../../types/message';
 
 interface MessageBubbleProps {
   message: MessageEnvelope;
   isOwn: boolean;
   decryptedPayload?: any; // The payload after decryption
+  onDeleteMessage?: (id: string) => void;
 }
 
-export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, isOwn, decryptedPayload }) => {
+export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, isOwn, decryptedPayload, onDeleteMessage }) => {
+  const [isRevealed, setIsRevealed] = useState(false);
+  const [isConsumed, setIsConsumed] = useState(false);
+
+  const handleReveal = () => {
+    if (isConsumed) return;
+    setIsRevealed(true);
+    
+    // View once messages self-destruct after viewing
+    if (message.isViewOnce) {
+      Alert.alert(
+        "View Once Message",
+        "This message will be permanently deleted after you close this.",
+        [{ text: "OK", onPress: () => {
+            setIsRevealed(false);
+            setIsConsumed(true);
+            if (onDeleteMessage && message.id) {
+              onDeleteMessage(message.id);
+            }
+        }}]
+      );
+    }
+  };
+
   const renderContent = () => {
+    if (isConsumed) {
+      return <Text style={styles.consumedText}>💣 Message expired</Text>;
+    }
+
+    if (message.isViewOnce && !isRevealed && !isOwn) {
+      return (
+        <TouchableOpacity onPress={handleReveal} style={styles.viewOnceButton}>
+          <Text style={styles.viewOnceText}>🔒 Tap to view (View Once)</Text>
+        </TouchableOpacity>
+      );
+    }
+
     if (!decryptedPayload) {
       return <Text style={styles.errorText}>Decrypting...</Text>;
     }
@@ -37,6 +73,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, isOwn, de
       <View style={[styles.bubble, isOwn ? styles.ownBubble : styles.peerBubble]}>
         {renderContent()}
         <View style={styles.footer}>
+          {message.expiresAt && (
+            <Text style={styles.timerIcon}>⏳</Text>
+          )}
           <Text style={styles.time}>
             {message.createdAt?.toDate ? message.createdAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
           </Text>
@@ -102,5 +141,26 @@ const styles = StyleSheet.create({
   status: {
     color: 'rgba(255, 255, 255, 0.8)',
     fontSize: 11,
+  },
+  timerIcon: {
+    fontSize: 11,
+    marginRight: 2,
+  },
+  consumedText: {
+    color: '#888888',
+    fontStyle: 'italic',
+    fontSize: 14,
+  },
+  viewOnceButton: {
+    padding: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  viewOnceText: {
+    color: '#00ffff',
+    fontWeight: 'bold',
+    fontSize: 14,
   },
 });

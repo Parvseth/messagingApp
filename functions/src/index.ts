@@ -47,7 +47,7 @@ export const onMessageCreate = functions.firestore
       default: body = 'Sent you an encrypted message'; // Text is encrypted, so we can't show it!
     }
 
-    // Send push notification via Expo
+    // Send push notification via Expo (Silent data-only push)
     try {
       const response = await fetch('https://exp.host/--/api/v2/push/send', {
         method: 'POST',
@@ -58,10 +58,15 @@ export const onMessageCreate = functions.firestore
         },
         body: JSON.stringify({
           to: pushToken,
-          sound: 'default',
-          title: 'ONE', // Hide sender name for maximum privacy, or fetch it if needed
-          body: body,
-          data: { pairId }, // Data for deep linking
+          // Omitting title, body, and sound to make it silent
+          _displayInForeground: false,
+          contentAvailable: true, // Crucial for iOS background fetch
+          data: { 
+            type: 'NEW_MESSAGE',
+            pairId,
+            messageId: snap.id,
+            // DO NOT send plaintext in payload!
+          },
         }),
       });
       

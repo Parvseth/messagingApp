@@ -32,6 +32,29 @@ export default function SettingsScreen() {
         </View>
 
         <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Attention Management</Text>
+          <View style={[styles.item, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
+            <View>
+              <Text style={styles.itemText}>Batched Notifications</Text>
+              <Text style={{ color: '#666', fontSize: 12, marginTop: 4 }}>Only deliver alerts at 9 AM, 1 PM, and 6 PM.</Text>
+            </View>
+            {/* Toggle switch placeholder */}
+            <View style={{ width: 44, height: 24, borderRadius: 12, backgroundColor: '#008b8b', padding: 2 }}>
+              <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: '#fff', alignSelf: 'flex-end' }} />
+            </View>
+          </View>
+          <View style={[styles.item, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
+            <View>
+              <Text style={styles.itemText}>Allow Emergency Override</Text>
+              <Text style={{ color: '#666', fontSize: 12, marginTop: 4 }}>Let your partner ping you instantly bypassing batches.</Text>
+            </View>
+            <View style={{ width: 44, height: 24, borderRadius: 12, backgroundColor: '#008b8b', padding: 2 }}>
+              <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: '#fff', alignSelf: 'flex-end' }} />
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: '#ff5555' }]}>Danger Zone</Text>
           <TouchableOpacity style={styles.item}>
             <Text style={[styles.itemText, { color: '#ff5555' }]}>Unpair</Text>

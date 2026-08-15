@@ -16,7 +16,10 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.parvsethsteam.one"
+      "bundleIdentifier": "com.parvsethsteam.one",
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "ONE needs Face ID to securely unlock your messages."
+      }
     },
     "android": {
       "package": "com.parvsethsteam.one",
@@ -26,11 +29,14 @@
       },
       "permissions": [
         "CAMERA",
+        "RECORD_AUDIO",
         "READ_CONTACTS",
         "WRITE_CONTACTS",
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
-        "VIBRATE"
+        "VIBRATE",
+        "USE_BIOMETRIC",
+        "USE_FINGERPRINT"
       ]
     },
     "plugins": [
@@ -40,7 +46,15 @@
       "expo-document-picker",
       "expo-contacts",
       "expo-av",
-      "expo-image-picker"
+      "expo-image-picker",
+      "expo-local-authentication",
+      [
+        "@config-plugins/react-native-webrtc",
+        {
+          "cameraPermission": "ONE needs access to your camera for video calls.",
+          "microphonePermission": "ONE needs access to your microphone for audio and video calls."
+        }
+      ]
     ],
     "owner": "parvseths-team",
     "extra": {

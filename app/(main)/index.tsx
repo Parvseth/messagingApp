@@ -3,81 +3,157 @@ import { View, Text, StyleSheet, TouchableOpacity, TextInput, FlatList, Keyboard
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import BottomSheet from '@gorhom/bottom-sheet';
+import { FlashList } from '@shopify/flash-list';
 import { MessageEnvelope } from '../../src/types/message';
 import { MessageBubble } from '../../src/components/chat/MessageBubble';
 import { AttachmentSheet } from '../../src/components/chat/AttachmentSheet';
 import { ImageViewer } from '../../src/components/chat/ImageViewer';
+import { CallScreen } from '../../src/components/chat/CallScreen';
 import { MessageService } from '../../src/services/messageService';
 import { CryptoService } from '../../src/services/cryptoService';
 import { MediaService } from '../../src/services/mediaService';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { firestore } from '../../src/config/firebase';
+import { LocalDatabase } from '../../src/services/localDatabase';
 
 export default function ChatScreen() {
   const [messages, setMessages] = useState<(MessageEnvelope & { decrypted?: any })[]>([]);
   const [text, setText] = useState('');
-  const [sharedKey, setSharedKey] = useState<Uint8Array | null>(null);
+  const [ratchet, setRatchet] = useState<any>(null); // Replace sharedKey with ratchet
   const sheetRef = useRef<BottomSheet>(null);
   const [viewerImage, setViewerImage] = useState<string | null>(null);
+  const [isViewOnceMode, setIsViewOnceMode] = useState(false);
+  const [activeCallId, setActiveCallId] = useState<string | null>(null);
+  const [isCalling, setIsCalling] = useState(false);
 
   // MOCK: In reality, we'd get this from Zustand/Auth context
   const currentUid = 'user1';
   const peerUid = 'user2';
   const pairId = 'pair123';
 
-  // MOCK ECDH Init
+  // MOCK ECDH Init -> Double Ratchet Init
   useEffect(() => {
-    // We mock the shared key generation here for UI demonstration
-    const keyPair = CryptoService.generateKeyPair();
-    setSharedKey(new Uint8Array(32)); // Dummy key for now
+    // We mock the Ratchet generation here for UI demonstration
+    const sharedSecret = new Uint8Array(32); // From initial setup
+    const initialRemotePubKey = CryptoService.generateKeyPair().publicKey; // Mock
+    const newRatchet = new CryptoService.RatchetState(sharedSecret, true, initialRemotePubKey); // MOCK
+    setRatchet(newRatchet);
   }, []);
 
+  const loadLocalMessages = () => {
+    const localMsgs = LocalDatabase.getMessages(pairId);
+    setMessages(localMsgs);
+  };
+
   useEffect(() => {
-    if (!sharedKey) return;
+    if (!ratchet) return;
+    
+    // Initial load from local DB
+    loadLocalMessages();
     
     const q = query(collection(firestore, 'messages'), orderBy('createdAt', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const msgs = snapshot.docs.map(doc => {
-        const data = doc.data() as MessageEnvelope;
-        data.id = doc.id;
-        
-        // Decrypt immediately if we can
-        let decrypted = null;
-        try {
-          decrypted = MessageService.decryptMessage(data, sharedKey);
-        } catch (e) {
-           // Decryption failed
+      let hasNewMessages = false;
+
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === 'added' || change.type === 'modified') {
+          const data = change.doc.data() as MessageEnvelope;
+          data.id = change.doc.id;
+          
+          if (data.pairId !== pairId) return;
+
+          let decrypted = null;
+          // If we receive a message from the peer, decrypt it
+          if (data.senderId !== currentUid) {
+            decrypted = MessageService.decryptMessage(data, ratchet);
+            // Save incoming decrypted message to local DB
+            LocalDatabase.saveMessage(data, decrypted, true);
+            hasNewMessages = true;
+          } else {
+             // For our own messages, if they are synced, update their status in local DB
+             const existingLocal = LocalDatabase.getMessages(pairId, 1, 0).find(m => m.id === data.id);
+             if (existingLocal) {
+               LocalDatabase.saveMessage({ ...existingLocal, status: 'sent', createdAt: data.createdAt }, existingLocal.decryptedPayload, true);
+               hasNewMessages = true;
+             }
+          }
+        } else if (change.type === 'removed') {
+           LocalDatabase.deleteMessage(change.doc.id);
+           hasNewMessages = true;
         }
-        
-        return { ...data, decrypted };
-      }).filter(m => m.pairId === pairId);
+      });
       
-      setMessages(msgs);
+      if (hasNewMessages) {
+        loadLocalMessages();
+      }
     });
 
     return () => unsubscribe();
-  }, [sharedKey]);
+  }, [ratchet]);
+
+  const handleDeleteMessage = async (id: string) => {
+    try {
+      // Hard delete from Local Database
+      LocalDatabase.deleteMessage(id);
+      
+      // Update UI immediately
+      loadLocalMessages();
+
+      // Optionally delete from Firestore
+      // await deleteDoc(doc(firestore, 'messages', id));
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   const handleSendText = async () => {
-    if (!text.trim() || !sharedKey) return;
+    if (!text.trim() || !ratchet) return;
     
     const payload = { text: text.trim() };
     setText('');
     
-    await MessageService.sendMessage(pairId, currentUid, 'text', payload, sharedKey);
+    const ephemeralParams = isViewOnceMode ? { isViewOnce: true } : {};
+    setIsViewOnceMode(false); // Reset after sending
+
+    await MessageService.sendMessage(pairId, currentUid, 'text', payload, ratchet, undefined, ephemeralParams);
   };
 
   const handleAttachment = async (option: string) => {
-    if (!sharedKey) return;
+    if (!ratchet) return;
     
     if (option === 'gallery') {
-      const payload = await MediaService.pickAndEncryptImage(sharedKey);
+      const payload = await MediaService.pickAndEncryptImage(ratchet); // assuming mediaService updated too
       if (payload) {
-        await MessageService.sendMessage(pairId, currentUid, 'image', payload, sharedKey);
+        await MessageService.sendMessage(pairId, currentUid, 'image', payload, ratchet);
       }
+    } else if (option === 'ping') {
+      // Send an emergency ping that bypasses notification batches
+      await MessageService.sendMessage(pairId, currentUid, 'text', { text: '🚨 Emergency Ping!' }, ratchet);
+    } else if (option === 'capsule') {
+      // Send a message that unlocks in the future
+      const futureTime = Date.now() + 1000 * 60 * 60 * 24; // 24 hours from now
+      await MessageService.sendMessage(pairId, currentUid, 'text', { text: '⏳ Time Capsule' }, ratchet, undefined, { expiresAt: futureTime });
     }
     // Implement other options...
   };
+
+  const startVideoCall = () => {
+    setIsCalling(true);
+    setActiveCallId(null); // startCall will generate one
+  };
+
+  if (isCalling) {
+    return (
+      <CallScreen
+        isIncoming={!!activeCallId}
+        callId={activeCallId || undefined}
+        onEndCall={() => {
+          setIsCalling(false);
+          setActiveCallId(null);
+        }}
+      />
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -86,24 +162,34 @@ export default function ChatScreen() {
           <Text style={styles.headerTitle}>YOUR PERSON</Text>
           <Text style={styles.headerSubtitle}>🔒 E2EE Active</Text>
         </View>
-        <TouchableOpacity onPress={() => router.push('/settings')}>
-          <Text style={styles.settingsIcon}>⚙️</Text>
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity onPress={() => router.push('/vault')} style={styles.callButton}>
+            <Text style={styles.callIcon}>🔐</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={startVideoCall} style={styles.callButton}>
+            <Text style={styles.callIcon}>📹</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => router.push('/settings')}>
+            <Text style={styles.settingsIcon}>⚙️</Text>
+          </TouchableOpacity>
+        </View>
       </View>
       
       <KeyboardAvoidingView 
         style={styles.chatArea}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <FlatList
+        <FlashList
           data={messages}
           keyExtractor={(item) => item.id!}
           inverted
+          estimatedItemSize={70}
           renderItem={({ item }) => (
             <MessageBubble 
               message={item} 
               isOwn={item.senderId === currentUid}
               decryptedPayload={item.decrypted}
+              onDeleteMessage={handleDeleteMessage}
             />
           )}
         />
@@ -112,10 +198,16 @@ export default function ChatScreen() {
           <TouchableOpacity style={styles.attachButton} onPress={() => sheetRef.current?.expand()}>
             <Text style={styles.attachIcon}>+</Text>
           </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.viewOnceToggleButton, isViewOnceMode && styles.viewOnceToggleButtonActive]} 
+            onPress={() => setIsViewOnceMode(!isViewOnceMode)}
+          >
+            <Text style={styles.viewOnceToggleIcon}>{isViewOnceMode ? '💣' : '👁️'}</Text>
+          </TouchableOpacity>
           <TextInput
             style={styles.input}
-            placeholder="Message..."
-            placeholderTextColor="#666666"
+            placeholder={isViewOnceMode ? "Send View Once..." : "Message..."}
+            placeholderTextColor={isViewOnceMode ? "#ff5555" : "#666666"}
             value={text}
             onChangeText={setText}
             multiline
@@ -170,6 +262,17 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 2,
   },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  callButton: {
+    padding: 4,
+  },
+  callIcon: {
+    fontSize: 24,
+  },
   settingsIcon: {
     fontSize: 24,
   },
@@ -220,5 +323,20 @@ const styles = StyleSheet.create({
   sendIcon: {
     color: '#ffffff',
     fontSize: 16,
+  },
+  viewOnceToggleButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#1a1a1a',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  viewOnceToggleButtonActive: {
+    backgroundColor: '#ff5555',
+  },
+  viewOnceToggleIcon: {
+    fontSize: 18,
   },
 });

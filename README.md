@@ -12,35 +12,36 @@ Built with **React Native**, **Expo SDK 54**, **TypeScript**, and **Firebase**, 
 
 ---
 
-## 🌟 Key Features
+## 🌟 Key Features (Relationship OS)
 
-- **🔒 End-to-End Encryption (E2EE)**: Powered by Curve25519 (X25519) asymmetric keys and XSalsa20-Poly1305 authenticated symmetric encryption via TweetNaCl.
+- **🔒 Perfect Forward Secrecy (PFS)**: True Double Ratchet Algorithm implemented on top of TweetNaCl. Every single message receives a newly derived, unique symmetric key using KDF chains (Root, Sending, Receiving) and asynchronous Diffie-Hellman ratcheting.
 - **🤫 Zero Noise Architecture**: Specifically designed as a 1:1 messaging application. No groups, no status updates, no algorithmic feeds.
-- **🔗 Simple & Secure Pairing**: Connect with your person via a secure invite code or QR code link.
-- **📱 Phone Authentication**: Seamless and secure onboarding using Firebase Phone Authentication.
-- **🖼️ Encrypted Attachments**: Share images, documents, contacts, locations, and calendar events securely. Binary files are encrypted locally before being uploaded to Firebase Storage.
-- **🔔 Private Push Notifications**: Real-time push notifications powered by Expo and Firebase Cloud Functions. Notification payloads are intentionally generic to preserve privacy.
-- **🟢 Online Status & Presence**: Real-time presence indicators via Firebase Realtime Database.
-- **🔑 Secure Hardware Storage**: Private keys are generated on-device and stored strictly in OS-encrypted hardware keychains via `expo-secure-store`.
-- **🛡️ Strict Zero-Trust Backend**: Firebase Firestore Security Rules explicitly forbid unencrypted plaintext fields, acting purely as a blind ciphertext relay.
+- **📹 E2EE P2P Audio & Video Calls**: High-definition peer-to-peer 1:1 WebRTC calling. Media streams are End-to-End Encrypted via DTLS/SRTP natively, with Firebase Firestore acting strictly as a zero-trust Signaling Server for SDP/ICE exchanges.
+- **⚡ High-Performance Architecture**: Chat UI is fully optimized to render thousands of message nodes at a buttery smooth 60fps utilizing Shopify's `FlashList` for intelligent view recycling.
+- **💾 Offline-First & Background Sync**: Messages are instantly saved to a local SQLite database and queued for sync. `expo-task-manager` wakes the app via silent data-only push notifications to decrypt incoming messages natively in the background.
+- **🔐 The Shared Vault**: A dedicated collaborative space containing a Shared Photo Gallery and a Real-time To-Do List.
+- **🎯 Attention Management**: Set "Batched Notifications" to only receive alerts at specific times of the day (e.g. 9AM, 1PM, 6PM). 
+- **🚨 Emergency Override Ping**: Bypass your partner's notification batches with a high-priority ping when it truly matters.
+- **⏳ Time Capsule Messages**: Send messages that are cryptographically locked until a specific future date and time.
+- **💣 Ephemeral Messaging**: Send self-destructing "View Once" messages or set Time-to-Live (TTL) auto-delete timers. Once consumed, the local payload is securely scrubbed and permanently deleted from the cloud.
+- **🛡️ Biometric Fallback Lock**: Hardware-backed App Lock enforces FaceID or TouchID before launching or resuming the app, preventing physical access compromises.
+- **🔑 Secure Hardware Storage**: Long-term private identity keys are generated on-device and stored strictly in OS-encrypted hardware keychains via `expo-secure-store`.
 
 ---
 
-## 🛡️ Cryptographic & Security Architecture
+## 🛡️ Advanced Cryptographic Architecture
 
-### 1. Key Generation & Exchange (ECDH)
-- **Curve25519 (X25519)**: Each user auto-generates a key pair upon initial launch.
-  - **Private Key**: Encrypted and stored locally using `expo-secure-store`.
-  - **Public Key**: Uploaded to the public `users/{uid}` collection in Firestore.
-- **Shared Key (ECDH)**: When a chat session begins, the client computes a 32-byte shared symmetric key using `nacl.box.before(peerPublicKey, mySecretKey)`. The shared key exists solely in transient RAM.
+### 1. The Double Ratchet Algorithm
+Unlike basic static ECDH configurations, ONE implements a complete custom Signal-style **Double Ratchet**:
+- **Root Chain**: Advances via an Asymmetric Diffie-Hellman (DH) exchange every time the messaging direction switches. Derives the next Root Key and the initial Chain Key.
+- **Symmetric Ratchets**: Sending and Receiving chains utilize HMAC-SHA-512-256 (KDF) to cryptographically roll a new message key and the next chain key for *every single message*.
+- **Post-Compromise Security**: Even if a device is compromised today, the attacker cannot decrypt past messages (Forward Secrecy), nor future messages once a new DH ratchet step occurs (Future Secrecy).
 
-### 2. Payload Encryption Lifecycle
-- **Nonce Generation**: A unique 24-byte random nonce is generated for every single message.
-- **Authenticated Encryption**: Plaintext (or raw binary file buffers) is encrypted using `nacl.box.after(data, nonce, sharedKey)`.
-- **Ciphertext Relay**: 
-  - Text messages: Pushed directly to Firestore.
-  - Large binary files (Images, Documents): Pushed to Firebase Storage; only the download URL, ciphertext, and nonce are pushed to Firestore.
-- **On-Device Decryption**: Receiving clients listen to Firestore snapshots, extract ciphertext/nonce, and invoke `nacl.box.open.after`. If MAC verification succeeds, plaintext/binary is rendered locally.
+### 2. Payload Encryption & Ephemeral Lifecycle
+- **Authenticated Encryption**: Plaintext (or raw binary file buffers) is encrypted using `nacl.box.after(data, nonce, messageKey)`.
+- **Ciphertext Relay**: Text ciphertext and attachment references are pushed to Firestore/Firebase Storage.
+- **Out-of-Order Delivery**: Skipped message keys are securely temporarily stored by the receiving client to allow reliable decryption in adverse network conditions.
+- **Cryptographic Scrubbing**: For ephemeral "View Once" media, memory buffers holding the decrypted `Uint8Array` keys are aggressively de-allocated after consumption, and the corresponding document is hard-deleted from the database.
 
 ---
 

@@ -12,6 +12,16 @@ export interface MessageEnvelope {
   ciphertext: string;      // Encrypted payload
   nonce: string;           // 24-byte random nonce
   status: MessageStatus;
+  
+  // Double Ratchet specific fields
+  dhPublicKey: string;     // Sender's current ECDH public key (Base64)
+  messageNumber: number;   // Index in the current sending chain
+  previousChainLength: number; // For handling out-of-order messages
+  
+  // Ephemeral fields
+  isViewOnce?: boolean;
+  expiresAt?: number;      // Unix timestamp for TTL messages
+  
   replyTo?: string;        // Message ID for reply threading
   createdAt: Timestamp | any;    // serverTimestamp or Date depending on local vs remote
   deliveredAt?: Timestamp;

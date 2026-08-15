@@ -8,7 +8,7 @@ interface AttachmentSheetProps {
 }
 
 export const AttachmentSheet: React.FC<AttachmentSheetProps> = ({ sheetRef, onSelectOption }) => {
-  const snapPoints = useMemo(() => ['40%'], []);
+  const snapPoints = useMemo(() => ['50%'], []);
 
   const renderBackdrop = useCallback(
     (props: any) => (
@@ -24,6 +24,8 @@ export const AttachmentSheet: React.FC<AttachmentSheetProps> = ({ sheetRef, onSe
     { id: 'contact', icon: '👤', label: 'Contact' },
     { id: 'location', icon: '📍', label: 'Location' },
     { id: 'event', icon: '📅', label: 'Event' },
+    { id: 'ping', icon: '🚨', label: 'Ping' },
+    { id: 'capsule', icon: '⏳', label: 'Capsule' },
   ];
 
   return (
