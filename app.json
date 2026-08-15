@@ -8,5 +8,15 @@
     }
   },
   "owner": "parvseths-team",
-  "slug": "parvseth"
+  "slug": "parvseth",
+  "expo": {
+    "android": {
+      "package": "com.parvsethsteam.parvseth"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "ce3ed1d3-0199-4139-a0c4-6d5fb77e6894"
+      }
+    }
+  }
 }

@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, Text, ActivityIndicator, SafeAreaView, StatusBar, Image, TouchableOpacity, Alert } from 'react-native';
+import { View, StyleSheet, Text, ActivityIndicator, StatusBar, Image, TouchableOpacity, Alert, KeyboardAvoidingView, Platform, Modal } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Sharing from 'expo-sharing';
 import * as MediaLibrary from 'expo-media-library';
+import * as Location from 'expo-location';
+import MapView, { Marker } from 'react-native-maps';
 import { GiftedChat, IMessage, Bubble, InputToolbar, Send, MessageText, Actions } from 'react-native-gifted-chat';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
 import { signInWithEmailAndPassword } from 'firebase/auth';
@@ -22,6 +25,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ currentUid, currentEmail
   const [sharedKey, setSharedKey] = useState<Uint8Array | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [errorStatus, setErrorStatus] = useState<string | null>(null);
+  const [mapVisible, setMapVisible] = useState(false);
 
   useEffect(() => {
     const loginAndStart = async () => {
@@ -126,6 +130,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ currentUid, currentEmail
               
               let finalMessageText = plainText || '⚠️ [Decryption Failed]';
               let imageUrl = undefined;
+              let locationObj = undefined;
 
               // Detect if the decrypted message is an inline image
               if (plainText && plainText.startsWith('data:image/')) {
@@ -139,12 +144,19 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ currentUid, currentEmail
                 } else {
                   finalMessageText = '⚠️ [Image Render Failed]';
                 }
+              } else if (plainText && plainText.startsWith('geo:')) {
+                const coords = plainText.replace('geo:', '').split(',');
+                if (coords.length === 2) {
+                  locationObj = { latitude: parseFloat(coords[0]), longitude: parseFloat(coords[1]) };
+                  finalMessageText = ''; // Hide text
+                }
               }
 
               decryptedMsgs.push({
                 _id: docSnap.id,
                 text: finalMessageText,
                 image: imageUrl,
+                location: locationObj,
                 createdAt: data.createdAt?.toDate() ? data.createdAt.toDate() : new Date(),
                 user: {
                   _id: data.senderId,
@@ -214,6 +226,30 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ currentUid, currentEmail
       nonce: encryptedPayload.nonce,
       createdAt: serverTimestamp(),
     });
+  };
+
+  const onShareLocation = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Need location permissions to share your live location.');
+        return;
+      }
+      const loc = await Location.getCurrentPositionAsync({});
+      setMapVisible(false); // Close map
+      const geoText = `geo:${loc.coords.latitude},${loc.coords.longitude}`;
+      const encryptedPayload = CryptoService.encryptMessage(geoText, sharedKey!);
+      await addDoc(collection(firestore, 'messages'), {
+        ciphertext: encryptedPayload.ciphertext,
+        nonce: encryptedPayload.nonce,
+        senderId: auth.currentUser!.uid,
+        receiverId: peerUid,
+        createdAt: serverTimestamp(),
+      });
+    } catch (e) {
+      console.error(e);
+      Alert.alert('Error', 'Failed to get location');
+    }
   };
 
   const renderActions = (props: any) => {
@@ -289,6 +325,29 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ currentUid, currentEmail
     );
   };
 
+  const renderCustomView = (props: any) => {
+    if (props.currentMessage.location) {
+      return (
+        <View style={{ width: 200, height: 150, borderRadius: 13, margin: 3, overflow: 'hidden' }}>
+          <MapView
+            style={{ width: 200, height: 150 }}
+            region={{
+              latitude: props.currentMessage.location.latitude,
+              longitude: props.currentMessage.location.longitude,
+              latitudeDelta: 0.01,
+              longitudeDelta: 0.01,
+            }}
+            scrollEnabled={false}
+            zoomEnabled={false}
+          >
+            <Marker coordinate={props.currentMessage.location} />
+          </MapView>
+        </View>
+      );
+    }
+    return null;
+  };
+
   if (!isAuthenticated) {
     return (
       <View style={{ flex: 1, backgroundColor: 'black', justifyContent: 'center', alignItems: 'center' }}>
@@ -325,61 +384,86 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ currentUid, currentEmail
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#000000" />
 
-      {/* Header bar indicating E2EE state */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>SECURE CHAT</Text>
-        <Text style={styles.headerSubtitle}>🔒 End-to-End Encrypted (X25519 / TweetNaCl)</Text>
+      <View style={[styles.header, { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20 }]}>
+        <View style={{ flex: 1 }} />
+        <View style={{ flex: 2, alignItems: 'center' }}>
+          <Text style={styles.headerTitle}>SECURE CHAT</Text>
+          <Text style={styles.headerSubtitle}>🔒 E2EE</Text>
+        </View>
+        <TouchableOpacity style={{ flex: 1, alignItems: 'flex-end' }} onPress={() => setMapVisible(true)}>
+           <Text style={{ fontSize: 22 }}>📍</Text>
+        </TouchableOpacity>
       </View>
 
-      <GiftedChat
-        messages={messages}
-        onSend={(msgs) => onSend(msgs)}
-        user={{
-          _id: auth.currentUser?.uid || currentUid,
-          name: currentEmail,
-        }}
-        messagesContainerStyle={{ backgroundColor: '#000000' }}
-        renderActions={renderActions}
-        renderMessageImage={renderMessageImage}
-        alwaysShowSend
-        showUserAvatar={false}
-        renderAvatar={null}
-        renderBubble={(props) => (
-          <Bubble
-            {...props}
-            wrapperStyle={{
-              right: {
-                backgroundColor: '#008b8b', // Outgoing: Muted cyan accent
-                borderRadius: 16,
-                paddingHorizontal: 4,
-                paddingVertical: 2,
-              },
-              left: {
-                backgroundColor: '#121212', // Incoming: Deep dark gray
-                borderRadius: 16,
-                paddingHorizontal: 4,
-                paddingVertical: 2,
-              },
-            }}
-            textStyle={{
-              right: { color: '#FFFFFF', fontSize: 15, fontFamily: 'System' },
-              left: { color: '#E0E0E0', fontSize: 15, fontFamily: 'System' },
-            }}
-          />
-        )}
-        renderInputToolbar={(props) => (
-          <InputToolbar
-            {...props}
-            containerStyle={styles.inputToolbar}
-            textInputStyle={styles.inputStyle}
-          />
-        )}
-        renderSend={(props) => (
-          <Send {...props} containerStyle={styles.sendButton}>
-            <Text style={styles.sendButtonText}>Send</Text>
-          </Send>
-        )}
-      />
+      <Modal visible={mapVisible} animationType="slide" presentationStyle="pageSheet">
+        <View style={{ flex: 1, backgroundColor: '#000' }}>
+          <MapView style={{ flex: 1 }} showsUserLocation={true} />
+          <View style={{ position: 'absolute', bottom: 40, width: '100%', flexDirection: 'row', justifyContent: 'space-evenly' }}>
+             <TouchableOpacity style={styles.mapButton} onPress={() => setMapVisible(false)}>
+               <Text style={styles.mapButtonText}>Back to Chat</Text>
+             </TouchableOpacity>
+             <TouchableOpacity style={[styles.mapButton, { backgroundColor: '#008b8b' }]} onPress={onShareLocation}>
+               <Text style={[styles.mapButtonText, { color: '#fff' }]}>Share Location</Text>
+             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+      <KeyboardAvoidingView 
+        style={{ flex: 1 }} 
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <GiftedChat
+          messages={messages}
+          onSend={(msgs) => onSend(msgs)}
+          user={{
+            _id: auth.currentUser?.uid || currentUid,
+            name: currentEmail,
+          }}
+          textInputProps={{ keyboardType: 'visible-password', autoCorrect: false }}
+          messagesContainerStyle={{ backgroundColor: '#000000' }}
+          renderActions={renderActions}
+          renderMessageImage={renderMessageImage}
+          renderCustomView={renderCustomView}
+          alwaysShowSend
+          showUserAvatar={false}
+          renderAvatar={null}
+          renderBubble={(props) => (
+            <Bubble
+              {...props}
+              wrapperStyle={{
+                right: {
+                  backgroundColor: '#008b8b', // Outgoing: Muted cyan accent
+                  borderRadius: 16,
+                  paddingHorizontal: 4,
+                  paddingVertical: 2,
+                },
+                left: {
+                  backgroundColor: '#121212', // Incoming: Deep dark gray
+                  borderRadius: 16,
+                  paddingHorizontal: 4,
+                  paddingVertical: 2,
+                },
+              }}
+              textStyle={{
+                right: { color: '#FFFFFF', fontSize: 15, fontFamily: 'System' },
+                left: { color: '#E0E0E0', fontSize: 15, fontFamily: 'System' },
+              }}
+            />
+          )}
+          renderInputToolbar={(props) => (
+            <InputToolbar
+              {...props}
+              containerStyle={styles.inputToolbar}
+              textInputStyle={styles.inputStyle}
+            />
+          )}
+          renderSend={(props) => (
+            <Send {...props} containerStyle={styles.sendButton}>
+              <Text style={styles.sendButtonText}>Send</Text>
+            </Send>
+          )}
+        />
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };
@@ -450,4 +534,17 @@ const styles = StyleSheet.create({
     fontSize: 15,
     letterSpacing: 0.5,
   },
+  mapButton: {
+    backgroundColor: '#1a1a1a',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#333333'
+  },
+  mapButtonText: {
+    color: '#ffffff',
+    fontWeight: '600',
+    fontSize: 15,
+  }
 });

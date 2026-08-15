@@ -1,12 +1,21 @@
-// MUST be imported at the root before any tweetnacl cryptographic functions are executed
 import 'react-native-get-random-values';
 
-import React, { useState } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, SafeAreaView, StatusBar } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, View, Text, TouchableOpacity, SafeAreaView, StatusBar, Alert } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import * as SecureStore from 'expo-secure-store';
+import * as ScreenCapture from 'expo-screen-capture';
+import { doc, deleteDoc } from 'firebase/firestore';
+import { firestore } from './src/config/firebase';
 import { ChatScreen } from './src/components/ChatScreen';
 
 export default function App() {
   const [selectedUser, setSelectedUser] = useState<'parvs' | 'priyal' | null>(null);
+
+  useEffect(() => {
+    // Block screenshots and screen recording OS-wide while app is open
+    ScreenCapture.preventScreenCaptureAsync();
+  }, []);
 
   if (!selectedUser) {
     return (
@@ -20,15 +29,16 @@ export default function App() {
             style={styles.button}
             onPress={() => setSelectedUser('parvs')}
           >
-            <Text style={styles.buttonText}>Log in as Parvseth</Text>
+            <Text style={styles.buttonText}>Log in as po</Text>
           </TouchableOpacity>
 
           <TouchableOpacity 
             style={[styles.button, styles.buttonSecondary]}
             onPress={() => setSelectedUser('priyal')}
           >
-            <Text style={styles.buttonText}>Log in as Priyal</Text>
+            <Text style={styles.buttonText}>Log in as mo</Text>
           </TouchableOpacity>
+
         </View>
       </SafeAreaView>
     );
@@ -40,21 +50,21 @@ export default function App() {
     : 'glzHLYlhewUXfltKRhV0PJIqTTE2';
     
   const currentEmail = selectedUser === 'parvs' 
-    ? 'parvs2004@gmail.com' 
-    : 'gpriyal856@gmail.com';
+    ? 'po' 
+    : 'mo';
     
   const peerUid = selectedUser === 'parvs' 
     ? 'glzHLYlhewUXfltKRhV0PJIqTTE2' 
     : 'Hu71Ftwfc7UlBimz9urREpC1P2m2';
 
   return (
-    <View style={styles.container}>
+    <SafeAreaProvider style={styles.container}>
       <ChatScreen
         currentUid={currentUid}
         currentEmail={currentEmail}
         peerUid={peerUid}
       />
-    </View>
+    </SafeAreaProvider>
   );
 }
 
