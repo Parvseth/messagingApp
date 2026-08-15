@@ -1,19 +1,52 @@
 {
-  "plugins": [
-    "expo-secure-store"
-  ],
-  "extra": {
-    "eas": {
-      "projectId": "b5ce5e1d-5d4f-4441-8d26-c8a36782fa58"
-    }
-  },
-  "owner": "parvseths-team",
-  "slug": "parvseth",
   "expo": {
-    "android": {
-      "package": "com.parvsethsteam.parvseth"
+    "name": "ONE",
+    "slug": "one-messaging",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#000000"
     },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.parvsethsteam.one"
+    },
+    "android": {
+      "package": "com.parvsethsteam.one",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#000000"
+      },
+      "permissions": [
+        "CAMERA",
+        "READ_CONTACTS",
+        "WRITE_CONTACTS",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "VIBRATE"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-screen-capture",
+      "expo-document-picker",
+      "expo-contacts",
+      "expo-av",
+      "expo-image-picker"
+    ],
+    "owner": "parvseths-team",
     "extra": {
+      "router": {
+        "origin": false
+      },
       "eas": {
         "projectId": "ce3ed1d3-0199-4139-a0c4-6d5fb77e6894"
       }

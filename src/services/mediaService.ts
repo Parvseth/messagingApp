@@ -1,63 +1,84 @@
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from 'expo-file-system';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { storage } from '../config/firebase';
-import { CryptoService, EncryptedPayload } from './cryptoService';
+import { CryptoService } from './cryptoService';
+import { MediaPayload } from '../types/message';
 
 export class MediaService {
-  /**
-   * Prompts the user to pick an image, compresses it heavily, reads it as Base64,
-   * encrypts it using TweetNaCl, and returns the encrypted payload to store in Firestore.
-   */
-  static async pickAndEncryptImage(sharedKey: Uint8Array): Promise<EncryptedPayload | null> {
+  static async pickAndEncryptImage(sharedKey: Uint8Array): Promise<MediaPayload | null> {
     try {
-      // 1. Pick and compress the image heavily to stay well below Firestore 1MB limit
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
-        allowsEditing: false, 
-        quality: 0.1, // Super heavy compression for inline database storage
+        allowsEditing: true,
+        quality: 0.3,
       });
 
       if (result.canceled || !result.assets || result.assets.length === 0) {
         return null;
       }
 
-      const imageUri = result.assets[0].uri;
-
-      // 2. Read the image as a Base64 string
+      const asset = result.assets[0];
+      const imageUri = asset.uri;
+      
+      // Read binary
       const base64Data = await FileSystem.readAsStringAsync(imageUri, {
-        encoding: 'base64',
+        encoding: FileSystem.EncodingType.Base64,
       });
+      const binaryData = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
 
-      // Prefix with data URI scheme
-      const dataUri = `data:image/jpeg;base64,${base64Data}`;
+      // Encrypt binary
+      const encryptedPayload = CryptoService.encryptBinary(binaryData, sharedKey);
+      
+      // Generate a unique filename
+      const fileName = `media_${Date.now()}.enc`;
+      const storageRef = ref(storage, `media/${fileName}`);
 
-      // 3. Encrypt the Data URI string directly
-      const encryptedPayload: EncryptedPayload = CryptoService.encryptMessage(dataUri, sharedKey);
+      // We upload the JSON containing ciphertext and nonce
+      const blob = new Blob([JSON.stringify(encryptedPayload)], { type: 'application/json' });
+      await uploadBytes(storageRef, blob);
+      const downloadUrl = await getDownloadURL(storageRef);
 
-      // Return the ciphertext to be saved directly in the Firestore message!
-      return encryptedPayload;
+      return {
+        storageUrl: downloadUrl,
+        mimeType: asset.mimeType || 'image/jpeg',
+        fileName: asset.fileName || 'image.jpg',
+        fileSize: asset.fileSize,
+      };
     } catch (error) {
       console.error('[MediaService] Error picking and encrypting image:', error);
       return null;
     }
   }
 
-  /**
-   * Saves a decrypted Data URI to a temporary file and returns the file path.
-   */
-  static async saveDecryptedImageToTempFile(dataUri: string): Promise<string | null> {
+  static async downloadAndDecryptImage(payload: MediaPayload, sharedKey: Uint8Array): Promise<string | null> {
+    if (!payload.storageUrl) return null;
     try {
-      const base64Data = dataUri.replace(/^data:image\/\w+;base64,/, '');
-      const localImagePath = FileSystem.cacheDirectory + `decrypted_${Math.random().toString(36).substring(7)}.jpg`;
+      const response = await fetch(payload.storageUrl);
+      const encryptedPayload = await response.json();
+      
+      const decryptedBytes = CryptoService.decryptBinary(
+        encryptedPayload.ciphertext,
+        encryptedPayload.nonce,
+        sharedKey
+      );
+
+      if (!decryptedBytes) return null;
+
+      // Convert back to base64
+      let binary = '';
+      decryptedBytes.forEach(b => binary += String.fromCharCode(b));
+      const base64Data = btoa(binary);
+
+      const localImagePath = FileSystem.cacheDirectory + `decrypted_${Date.now()}.jpg`;
       
       await FileSystem.writeAsStringAsync(localImagePath, base64Data, {
-        encoding: 'base64',
+        encoding: FileSystem.EncodingType.Base64,
       });
 
       return localImagePath;
     } catch (error) {
-      console.error('[MediaService] Error saving image to temp file:', error);
+      console.error('[MediaService] Error downloading and decrypting image:', error);
       return null;
     }
   }

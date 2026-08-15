@@ -81,4 +81,36 @@ export class CryptoService {
       return null;
     }
   }
+  /**
+   * Encrypts binary data using the pre-computed shared symmetric key and a random 24-byte nonce.
+   */
+  static encryptBinary(data: Uint8Array, sharedKey: Uint8Array): EncryptedPayload {
+    const nonce = nacl.randomBytes(nacl.box.nonceLength);
+    const encryptedBytes = nacl.box.after(data, nonce, sharedKey);
+
+    return {
+      ciphertext: naclUtil.encodeBase64(encryptedBytes),
+      nonce: naclUtil.encodeBase64(nonce),
+    };
+  }
+
+  /**
+   * Decrypts binary data returning Uint8Array.
+   */
+  static decryptBinary(
+    ciphertextBase64: string,
+    nonceBase64: string,
+    sharedKey: Uint8Array
+  ): Uint8Array | null {
+    try {
+      const ciphertext = naclUtil.decodeBase64(ciphertextBase64);
+      const nonce = naclUtil.decodeBase64(nonceBase64);
+      const decryptedBytes = nacl.box.open.after(ciphertext, nonce, sharedKey);
+
+      return decryptedBytes || null;
+    } catch (error) {
+      console.error('[CryptoService] Binary decryption failed:', error);
+      return null;
+    }
+  }
 }

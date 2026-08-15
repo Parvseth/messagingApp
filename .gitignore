@@ -1,1 +1,25 @@
-node_modules
+node_modules/
+.expo/
+dist/
+npm-debug.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+web-build/
+
+# macOS
+.DS_Store
+
+# dotenv
+.env
+.env.local
+.env.*.local
+
+# Android/iOS native
+android/
+ios/
+google-services.json
+GoogleService-Info.plist
