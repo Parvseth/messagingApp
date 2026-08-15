@@ -51,20 +51,25 @@ Unlike basic static ECDH configurations, ONE implements a complete custom Signal
 messaging-e2ee/
 ├── app/                           # Expo Router Screens (Navigation)
 │   ├── (auth)/                    # Onboarding, Phone Login, Profile Setup
-│   ├── (main)/                    # Core Chat UI, Settings
+│   ├── (main)/                    # Core Chat UI, Settings, Vault (vault.tsx)
 │   └── pair/                      # Invite Generation & Acceptance
 ├── docs/                          # Play Store Legal Documents (Privacy/ToS)
 ├── functions/                     # Firebase Cloud Functions (Push Notifications)
 ├── firestore.rules                # Strict Firestore Zero-Trust Security Rules
 ├── eas.json                       # EAS Build & release profiles
+├── app.json                       # App config, permissions, and Expo Config Plugins
 ├── babel.config.js                # Babel path aliases and reanimated config
 └── src/
     ├── components/
-    │   └── chat/                  # Custom UI: MessageBubble, AttachmentSheet, ImageViewer
+    │   ├── BiometricLock.tsx      # Root-level FaceID/TouchID security wrapper
+    │   └── chat/                  # Custom UI: MessageBubble, AttachmentSheet, CallScreen
     ├── config/
     │   └── firebase.ts            # Firebase app & services initialization
     ├── services/
-    │   ├── cryptoService.ts       # TweetNaCl primitives (text and binary encryption)
+    │   ├── cryptoService.ts       # Double Ratchet state manager & TweetNaCl primitives
+    │   ├── localDatabase.ts       # SQLite offline-first database wrapper
+    │   ├── backgroundTasks.ts     # expo-task-manager logic for silent push decryption
+    │   ├── webrtcService.ts       # P2P WebRTC connection & signaling logic
     │   ├── messageService.ts      # Unified message sending/receiving
     │   ├── mediaService.ts        # Image capture, compression, and encryption
     │   ├── documentService.ts     # Document picking and encryption
@@ -81,7 +86,8 @@ messaging-e2ee/
 ### Prerequisites
 - Node.js (v18 or higher recommended)
 - Firebase Project (with Auth, Firestore, Storage, and Realtime Database enabled)
-- Expo Go app or an Android/iOS Emulator
+- Android Studio / Xcode for compiling Native Modules
+- **NOTE**: Because this app uses custom native modules (WebRTC, SQLite, Task Manager), it **WILL NOT WORK in Expo Go**. You must use an Expo Development Build.
 
 ### Installation
 
@@ -117,17 +123,14 @@ messaging-e2ee/
 
 ## 🚀 Running the App
 
-Start the Expo development server:
+Start an Expo Development Build to compile the native modules:
 
 ```bash
-# Start Expo server
-npm start
+# Compile and run on Android Emulator/Device
+npx expo run:android
 
-# Run on Android Emulator
-npm run android
-
-# Run on iOS Simulator
-npm run ios
+# Compile and run on iOS Simulator/Device
+npx expo run:ios
 ```
 
 ---
@@ -152,7 +155,7 @@ This project is pre-configured with **EAS Build** for Play Store deployment.
 
 ## ⚖️ Security Disclaimer
 
-This application utilizes standard TweetNaCl algorithms for end-to-end encryption. Security guarantees rely on key secrecy: if a physical device is rooted or compromised, stored private keys in hardware storage may be exposed. Always protect your device with secure passcodes/biometrics.
+This application utilizes the Double Ratchet Algorithm, KDF chains, and TweetNaCl primitives for state-of-the-art end-to-end encryption. Security guarantees rely on key secrecy and cryptographic memory scrubbing. While ephemeral payloads are immediately wiped from memory, if a physical device is fundamentally rooted or compromised, stored private keys in hardware storage could theoretically be exposed. Always protect your device with secure passcodes and leverage the included biometric app lock.
 
 ---
 
